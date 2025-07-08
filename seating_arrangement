@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import font
+from tkinter import font, messagebox
 import random
 import time
 
@@ -23,95 +23,131 @@ class AmidakujiApp:
         self.title_font = font.Font(family="Segoe UI Semibold", size=14)
         self.mono_font = font.Font(family="Consolas", size=9)
 
-        # Student data
-        self.num_students = 34
-        self.names = [f"Student {i+1}" for i in range(self.num_students)]
+        # --- Student Data ---
+        self.num_slots = 34 # The number of dropdown slots
+        self.unselected_placeholder = "---" # Placeholder for unselected state
+        
+        # A map of surnames to full names for the dropdowns
+        self.name_map = {
+            "中村": "中村颯南", "丸山": "丸山晴生", "会田": "会田心穏", "佐々木": "佐々木琉斗", "佐藤": "佐藤璃音", "内藤": "内藤倖一朗",
+            "園部": "園部可憐", "大川": "大川める", "大曽根": "大曽根維月", "大谷": "大谷和輝", "室井": "室井陽人", "小嶋": "小嶋杏奈",
+            "小川": "小川快晴", "小林": "小林智宥", "尾形": "尾形勇飛", "山崎": "山崎しおん", "岡田": "岡田悠斗", "有年": "有年禅",
+            "水口": "水口夏悟", "河田": "河田愛子", "海老原": "海老原穂鷹", "渡邉": "渡邉美空", "猪野": "猪野夢奈", "田家": "田家瑶姫",
+            "田島": "田島大暉", "相場": "相場日菜詩", "秋葉": "秋葉心愛", "薄井": "薄井駿介", "藤澤": "藤澤志帆", "遠藤": "遠藤結衣",
+            "鈴木": "鈴木杏奈", "馬場": "馬場美幸", "齋藤": "齋藤優", "山中": "山中壱嵯"
+        }
+        
+        # --- MODIFICATION START ---
+        # Define the set of students who should not be in the front row
+        self.front_row_restricted_students = {"小林智宥", "大川める", "大曽根維月", "渡邉美空", "水口夏悟", "室井陽人"}
+        # --- MODIFICATION END ---
+
+        # This will be populated dynamically based on selections
+        self.names = []
+        self.num_students = 0
+        
         self.cols = 6
         self.rows = 6
         self.vacant_seats = [(0, 0), (0, 5)] 
         
         self.create_widgets()
 
+    def show_message(self, title, message):
+        """Displays a custom message box."""
+        msg_box = tk.Toplevel(self.root)
+        msg_box.title(title)
+        msg_box.configure(bg=self.widget_bg)
+        
+        root_x = self.root.winfo_x()
+        root_y = self.root.winfo_y()
+        root_w = self.root.winfo_width()
+        root_h = self.root.winfo_height()
+        msg_w = 400
+        msg_h = 150
+        msg_x = root_x + (root_w // 2) - (msg_w // 2)
+        msg_y = root_y + (root_h // 2) - (msg_h // 2)
+        msg_box.geometry(f"{msg_w}x{msg_h}+{msg_x}+{msg_y}")
+
+        msg_label = tk.Label(msg_box, text=message, font=self.default_font, bg=self.widget_bg, fg=self.fg_color, wraplength=380, pady=20)
+        msg_label.pack(expand=True, fill="both", padx=10)
+
+        ok_button = tk.Button(msg_box, text="OK", command=msg_box.destroy,
+                              font=self.default_font, bg=self.button_bg, fg=self.button_fg,
+                              activebackground=self.accent_color2, activeforeground=self.button_fg,
+                              relief=tk.FLAT, bd=0, padx=20, pady=5)
+        ok_button.pack(pady=(0, 15))
+
+        msg_box.transient(self.root)
+        msg_box.grab_set()
+        self.root.wait_window(msg_box)
+
     def create_widgets(self):
-        # Main frame with padding
         main_frame = tk.Frame(self.root, padx=30, pady=30, bg=self.bg_color)
         main_frame.pack(fill="both", expand=True)
         main_frame.grid_columnconfigure(0, weight=2, uniform="group1")
         main_frame.grid_columnconfigure(1, weight=3, uniform="group1")
         main_frame.grid_rowconfigure(0, weight=1)
 
-        # --- Left Column Frame ---
         left_frame = tk.Frame(main_frame, bg=self.bg_color)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
 
-        # --- Input Section ---
         input_container = tk.LabelFrame(left_frame, text="Enter Student Names", padx=20, pady=20, 
                                     bg=self.widget_bg, fg=self.fg_color, font=self.title_font,
                                     bd=0)
         input_container.pack(pady=(0, 10), fill="x")
 
-        # --- Scrollable Name Entry ---
         canvas = tk.Canvas(input_container, bg=self.widget_bg, height=400, highlightthickness=0)
         scrollbar = tk.Scrollbar(input_container, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg=self.widget_bg)
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(
-                scrollregion=canvas.bbox("all")
-            )
-        )
-
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # --- MODIFICATION START ---
-        # Changed the student name entry to a 3-column layout
-        self.name_entries = []
-        num_columns = 3  # Define the number of columns
-        for i in range(self.num_students):
-            # Calculate row and column for the grid
+        self.name_vars = []
+        self.dropdowns = []
+        num_columns = 3
+        for i in range(self.num_slots):
             row, col = divmod(i, num_columns)
-            
             frame = tk.Frame(scrollable_frame, bg=self.widget_bg)
-            # Place the frame in the grid
             frame.grid(row=row, column=col, padx=5, pady=5, sticky='w')
             
             label = tk.Label(frame, text=f"{i+1:02d}", bg=self.widget_bg, fg=self.accent_color1, font=self.default_font)
             label.pack(side=tk.LEFT, padx=(0, 5))
             
-            # Reduced the width of the entry box to 12 (from 25)
-            entry = tk.Entry(frame, width=12, bg=self.bg_color, fg=self.fg_color, 
-                             insertbackground=self.fg_color, font=self.default_font, bd=1, relief=tk.SOLID,
-                             highlightthickness=1, highlightbackground=self.widget_bg, highlightcolor=self.accent_color1)
-            entry.insert(0, self.names[i])
-            entry.pack(side=tk.LEFT)
-            self.name_entries.append(entry)
-        # --- MODIFICATION END ---
+            selected_surname = tk.StringVar()
+            self.name_vars.append(selected_surname)
 
-        # --- Controls Frame ---
+            dropdown = tk.OptionMenu(frame, selected_surname, self.unselected_placeholder)
+            dropdown.config(width=8, font=self.default_font, bg=self.bg_color, fg=self.fg_color,
+                            activebackground=self.accent_color1, activeforeground=self.button_fg,
+                            relief=tk.SOLID, bd=1, highlightthickness=0)
+            dropdown["menu"].config(bg=self.widget_bg, fg=self.fg_color, font=self.default_font,
+                                   activebackground=self.accent_color1, activeforeground=self.button_fg)
+            dropdown.pack(side=tk.LEFT)
+            self.dropdowns.append(dropdown)
+        
+        for var in self.name_vars:
+            var.trace_add("write", self.update_dropdown_options)
+        
+        self.update_dropdown_options()
+
         controls_container = tk.Frame(left_frame, bg=self.widget_bg)
         controls_container.pack(fill='x', pady=10)
         
-        # --- Shuffle Button ---
         shuffle_button = tk.Button(controls_container, text="SHUFFLE SEATS", command=self.start_shuffle,
                                    font=self.title_font, bg=self.button_bg, fg=self.button_fg,
                                    activebackground=self.accent_color2, activeforeground=self.button_fg, 
                                    relief=tk.FLAT, bd=0, padx=20, pady=10)
         shuffle_button.pack(pady=20, padx=20, fill='x')
 
-        # --- Speed Control Section ---
         speed_frame = tk.Frame(controls_container, bg=self.widget_bg)
         speed_frame.pack(pady=(0, 20), padx=20, fill='x')
-        
         speed_label = tk.Label(speed_frame, text="Animation Speed:", bg=self.widget_bg, fg=self.fg_color, font=self.default_font)
         speed_label.pack(side=tk.LEFT)
-
         self.speed_multiplier = tk.DoubleVar(value=1.0) 
-
         speeds = [("1x", 1.0), ("8x", 8.0), ("16x", 16.0), ("128x", 128.0)]
         for text, val in speeds:
             rb = tk.Radiobutton(speed_frame, text=text, variable=self.speed_multiplier, value=val, 
@@ -120,17 +156,14 @@ class AmidakujiApp:
                            font=self.default_font, indicatoron=0, relief=tk.FLAT, bd=0, padx=10, pady=5)
             rb.pack(side=tk.LEFT, padx=5, expand=True, fill='x')
         
-        # --- Right Column Frame ---
         right_frame = tk.Frame(main_frame, bg=self.widget_bg)
         right_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         right_frame.grid_rowconfigure(0, weight=1)
         right_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Seating Chart Section ---
         self.seating_chart_frame = tk.Frame(right_frame, bg=self.widget_bg)
         self.seating_chart_frame.pack(pady=20, padx=20, expand=True)
         
-        # --- New ASCII Art Title ---
         seating_art = r"""
 ███████╗███████╗ █████╗ ████████╗██╗███╗   ██╗ ██████╗      █████╗ ██████╗ ██████╗  ██████╗ ███████╗███╗   ██╗████████╗
 ██╔════╝██╔════╝██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝     ██╔══██╗██╔══██╗██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝
@@ -142,7 +175,6 @@ class AmidakujiApp:
         self.seating_title_label = tk.Label(self.seating_chart_frame, text=seating_art, font=self.mono_font, justify=tk.LEFT, bg=self.widget_bg, fg=self.accent_color2)
         self.seating_title_label.grid(row=0, column=0, columnspan=self.cols, pady=(0, 20))
 
-        # --- Front of Classroom Label ---
         front_label = tk.Label(self.seating_chart_frame, text="--- FRONT OF CLASSROOM ---", bg=self.widget_bg, fg=self.fg_color, font=font.Font(family="Segoe UI", size=10, slant="italic"))
         front_label.grid(row=1, column=0, columnspan=self.cols, pady=(0, 10))
 
@@ -153,39 +185,76 @@ class AmidakujiApp:
                 seat_frame = tk.Frame(self.seating_chart_frame, width=120, height=60, bg=self.bg_color)
                 seat_frame.grid(row=r + 2, column=c, padx=5, pady=5)
                 seat_frame.pack_propagate(False)
-
                 label = tk.Label(seat_frame, text="", bg=self.bg_color, fg=self.fg_color, font=self.default_font)
                 label.pack(expand=True, fill='both')
-
                 if (r, c) in self.vacant_seats:
                     label.config(text="VACANT", bg='#45475a', font=font.Font(family="Segoe UI Semibold", size=10))
-
                 row_labels.append(label)
             self.seat_labels.append(row_labels)
         
-        # --- Footer Section ---
         footer_frame = tk.Frame(right_frame, bg=self.widget_bg)
         footer_frame.pack(pady=10, padx=20, fill=tk.X, side=tk.BOTTOM)
-
         mit_license_text = "Released under the MIT License"
         license_label = tk.Label(footer_frame, text=mit_license_text, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
         license_label.pack()
-
-        contact_text1 = "Contact: luruna_anachira.88works@outlook.com"
+        contact_text1 = "Personal Contact: luruna_anachira.88works@outlook.com"
         contact_label1 = tk.Label(footer_frame, text=contact_text1, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
         contact_label1.pack()
-        
-        contact_text2 = "Contact: root_overclocker@outlook.com"
+        contact_text2 = "Religious Contact: root_overclocker@outlook.com"
         contact_label2 = tk.Label(footer_frame, text=contact_text2, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
         contact_label2.pack()
-        
         github_text = "GitHub: Anachira"
         github_label = tk.Label(footer_frame, text=github_text, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
         github_label.pack()
 
+    def update_dropdown_options(self, *args):
+        """Dynamically update the options in all dropdowns to prevent duplicates."""
+        selected_names = {var.get() for var in self.name_vars if var.get() != self.unselected_placeholder}
+        all_names = set(self.name_map.keys())
+        available_names = sorted(list(all_names - selected_names))
+
+        for i, dropdown in enumerate(self.dropdowns):
+            current_selection = self.name_vars[i].get()
+            
+            new_options = [self.unselected_placeholder]
+            if current_selection != self.unselected_placeholder:
+                new_options.append(current_selection)
+            new_options.extend(available_names)
+            
+            new_options = [new_options[0]] + sorted(new_options[1:])
+
+            menu = dropdown["menu"]
+            menu.delete(0, "end")
+            
+            for option in new_options:
+                menu.add_command(label=option, command=tk._setit(self.name_vars[i], option))
+
     def start_shuffle(self):
-        self.names = [entry.get() for entry in self.name_entries]
-        # Clear previous seating arrangement before shuffle
+        selected_surnames = [var.get() for var in self.name_vars if var.get() != self.unselected_placeholder]
+        
+        unique_surnames = list(dict.fromkeys(selected_surnames))
+        self.names = [self.name_map[surname] for surname in unique_surnames]
+        self.num_students = len(self.names)
+        
+        if self.num_students < 2:
+            self.show_message("Error", "Please select at least two students to start the shuffle.")
+            return
+        
+        # --- MODIFICATION START ---
+        # Check if the front row can be filled with unrestricted students
+        unrestricted_students = [name for name in self.names if name not in self.front_row_restricted_students]
+        
+        all_possible_seats = [(r, c) for r in range(self.rows) for c in range(self.cols)]
+        available_seats = [seat for seat in all_possible_seats if seat not in self.vacant_seats]
+        front_row_seats = [seat for seat in available_seats if seat[0] == 0]
+
+        if len(unrestricted_students) < len(front_row_seats):
+            self.show_message("Assignment Error", 
+                              "Not enough unrestricted students to fill the front row. "
+                              "Please select more students who are not on the restricted list.")
+            return
+        # --- MODIFICATION END ---
+        
         for r in range(self.rows):
             for c in range(self.cols):
                  if (r, c) not in self.vacant_seats:
@@ -224,11 +293,12 @@ class AmidakujiApp:
         for i in range(num_verticals):
             x = x_start + i * x_spacing
             canvas.create_line(x, y_start, x, y_start + path_height, width=2, fill=self.fg_color)
-            canvas.create_text(x, y_start - 20, text=self.names[i], font=self.default_font, fill=self.fg_color)
+            canvas.create_text(x, y_start - 20, text=self.names[i], font=font.Font(family="Yu Gothic UI", size=10), fill=self.fg_color)
             vertical_lines.append(x)
 
         ladders = []
         for _ in range(num_verticals * 4): 
+            if num_verticals < 2: break
             v_index = random.randint(0, num_verticals - 2)
             y_pos = random.randint(y_start + 40, y_start + path_height - 40)
             
@@ -286,7 +356,7 @@ class AmidakujiApp:
                     current_vertical_index -= 1
 
             self.animate_move(canvas, path_tracer, current_x, y_start + path_height, animation_speed, color)
-            canvas.create_text(current_x, y_start + path_height + 25, text=self.names[i], font=self.default_font, fill=color)
+            canvas.create_text(current_x, y_start + path_height + 25, text=self.names[i], font=font.Font(family="Yu Gothic UI", size=10), fill=color)
         
         self.animation_window.after(1000, lambda: self.update_seating_chart(shuffled_names))
         self.animation_window.after(3000, self.animation_window.destroy)
@@ -317,15 +387,52 @@ class AmidakujiApp:
             time.sleep(speed)
 
     def update_seating_chart(self, shuffled_names):
+        # --- MODIFICATION START ---
+        # Get all available seats
+        all_possible_seats = [(r, c) for r in range(self.rows) for c in range(self.cols)]
+        available_seats = [seat for seat in all_possible_seats if seat not in self.vacant_seats]
+        
+        # Create initial assignments based on shuffle results
+        assignments = {seat: name for seat, name in zip(available_seats, shuffled_names)}
+        
+        # Identify problematic assignments (restricted student in front row)
+        problem_assignments = []
+        for seat, name in assignments.items():
+            if seat[0] == 0 and name in self.front_row_restricted_students:
+                problem_assignments.append((seat, name))
+
+        # Identify potential solutions (unrestricted student not in front row)
+        solution_assignments = []
+        for seat, name in assignments.items():
+            if seat[0] != 0 and name not in self.front_row_restricted_students:
+                solution_assignments.append((seat, name))
+        
+        # Swap assignments to fix problems
+        for p_seat, p_name in problem_assignments:
+            if not solution_assignments:
+                break # Should not happen due to the check in start_shuffle
+            
+            # Pop a solution
+            s_seat, s_name = solution_assignments.pop(0)
+            
+            # Swap the names in the assignment dictionary
+            assignments[p_seat] = s_name
+            assignments[s_seat] = p_name
+
+        # Update the seat labels based on the final assignments
         name_index = 0
         for r in range(self.rows):
             for c in range(self.cols):
-                if (r, c) not in self.vacant_seats:
-                    if name_index < len(shuffled_names):
-                        self.seat_labels[r][c].config(text=shuffled_names[name_index], bg=self.accent_color2, fg=self.bg_color, font=font.Font(family="Segoe UI Semibold", size=10))
-                        name_index += 1
+                seat_pos = (r, c)
+                if seat_pos not in self.vacant_seats:
+                    if seat_pos in assignments:
+                        student_name = assignments[seat_pos]
+                        self.seat_labels[r][c].config(text=student_name, bg=self.accent_color2, fg=self.bg_color, font=font.Font(family="Yu Gothic UI Semibold", size=10))
                     else:
-                        self.seat_labels[r][c].config(text="EMPTY", bg=self.bg_color)
+                        # This seat is available but not filled (less students than seats)
+                        self.seat_labels[r][c].config(text="", bg=self.bg_color)
+        # --- MODIFICATION END ---
+
 
 if __name__ == "__main__":
     root = tk.Tk()
