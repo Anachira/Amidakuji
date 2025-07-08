@@ -1,0 +1,322 @@
+import tkinter as tk
+from tkinter import font
+import random
+import time
+
+class AmidakujiApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Amidakuji Seat Shuffler")
+        # --- Modern UI Colors ---
+        self.bg_color = '#1e1e2e'      # Dark blue-grey
+        self.fg_color = '#cdd6f4'      # Light lavender
+        self.widget_bg = '#313244'   # Darker grey
+        self.accent_color1 = '#89b4fa' # Blue
+        self.accent_color2 = '#f5c2e7' # Pink
+        self.button_bg = self.accent_color1
+        self.button_fg = '#1e1e2e'
+        self.root.configure(bg=self.bg_color)
+        self.root.geometry("1400x900")
+
+        # --- Fonts ---
+        self.default_font = font.Font(family="Segoe UI", size=10)
+        self.title_font = font.Font(family="Segoe UI Semibold", size=14)
+        self.mono_font = font.Font(family="Consolas", size=9)
+
+        # Student data
+        self.num_students = 34
+        self.names = [f"Student {i+1}" for i in range(self.num_students)]
+        self.cols = 6
+        self.rows = 6
+        self.vacant_seats = [(0, 0), (0, 5)] 
+        
+        self.create_widgets()
+
+    def create_widgets(self):
+        # Main frame with padding
+        main_frame = tk.Frame(self.root, padx=30, pady=30, bg=self.bg_color)
+        main_frame.pack(fill="both", expand=True)
+        main_frame.grid_columnconfigure(0, weight=2, uniform="group1")
+        main_frame.grid_columnconfigure(1, weight=3, uniform="group1")
+        main_frame.grid_rowconfigure(0, weight=1)
+
+        # --- Left Column Frame ---
+        left_frame = tk.Frame(main_frame, bg=self.bg_color)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+
+        # --- Input Section ---
+        input_container = tk.LabelFrame(left_frame, text="Enter Student Names", padx=20, pady=20, 
+                                    bg=self.widget_bg, fg=self.fg_color, font=self.title_font,
+                                    bd=0)
+        input_container.pack(pady=(0, 10), fill="x")
+
+        # --- Scrollable Name Entry ---
+        canvas = tk.Canvas(input_container, bg=self.widget_bg, height=400, highlightthickness=0)
+        scrollbar = tk.Scrollbar(input_container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=self.widget_bg)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        self.name_entries = []
+        for i in range(self.num_students):
+            frame = tk.Frame(scrollable_frame, bg=self.widget_bg)
+            frame.grid(row=i, column=0, padx=10, pady=8, sticky='w') # Single column layout
+            label = tk.Label(frame, text=f"{i+1:02d}", bg=self.widget_bg, fg=self.accent_color1, font=self.default_font)
+            label.pack(side=tk.LEFT, padx=(0, 5))
+            entry = tk.Entry(frame, width=25, bg=self.bg_color, fg=self.fg_color, 
+                             insertbackground=self.fg_color, font=self.default_font, bd=1, relief=tk.SOLID,
+                             highlightthickness=1, highlightbackground=self.widget_bg, highlightcolor=self.accent_color1)
+            entry.insert(0, self.names[i])
+            entry.pack(side=tk.LEFT)
+            self.name_entries.append(entry)
+
+        # --- Controls Frame ---
+        controls_container = tk.Frame(left_frame, bg=self.widget_bg)
+        controls_container.pack(fill='x', pady=10)
+        
+        # --- Shuffle Button ---
+        shuffle_button = tk.Button(controls_container, text="SHUFFLE SEATS", command=self.start_shuffle,
+                                   font=self.title_font, bg=self.button_bg, fg=self.button_fg,
+                                   activebackground=self.accent_color2, activeforeground=self.button_fg, 
+                                   relief=tk.FLAT, bd=0, padx=20, pady=10)
+        shuffle_button.pack(pady=20, padx=20, fill='x')
+
+        # --- Speed Control Section ---
+        speed_frame = tk.Frame(controls_container, bg=self.widget_bg)
+        speed_frame.pack(pady=(0, 20), padx=20, fill='x')
+        
+        speed_label = tk.Label(speed_frame, text="Animation Speed:", bg=self.widget_bg, fg=self.fg_color, font=self.default_font)
+        speed_label.pack(side=tk.LEFT)
+
+        self.speed_multiplier = tk.DoubleVar(value=1.0) 
+
+        speeds = [("1x", 1.0), ("8x", 8.0), ("16x", 16.0), ("128x", 128.0)]
+        for text, val in speeds:
+            rb = tk.Radiobutton(speed_frame, text=text, variable=self.speed_multiplier, value=val, 
+                           bg=self.widget_bg, fg=self.fg_color, selectcolor=self.accent_color2,
+                           activebackground=self.widget_bg, activeforeground=self.fg_color,
+                           font=self.default_font, indicatoron=0, relief=tk.FLAT, bd=0, padx=10, pady=5)
+            rb.pack(side=tk.LEFT, padx=5, expand=True, fill='x')
+        
+        # --- Right Column Frame ---
+        right_frame = tk.Frame(main_frame, bg=self.widget_bg)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        right_frame.grid_rowconfigure(0, weight=1)
+        right_frame.grid_columnconfigure(0, weight=1)
+
+        # --- Seating Chart Section ---
+        self.seating_chart_frame = tk.Frame(right_frame, bg=self.widget_bg)
+        self.seating_chart_frame.pack(pady=20, padx=20, expand=True)
+        
+        # --- New ASCII Art Title ---
+        seating_art = r"""
+███████╗███████╗ █████╗ ████████╗██╗███╗   ██╗ ██████╗      █████╗ ██████╗ ██████╗  ██████╗ ███████╗███╗   ██╗████████╗
+██╔════╝██╔════╝██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝     ██╔══██╗██╔══██╗██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝
+███████╗█████╗  ███████║   ██║   ██║██╔██╗ ██║██║  ███╗    ███████║██████╔╝██████╔╝██║  ███╗█████╗  ██╔██╗ ██║   ██║   
+╚════██║██╔══╝  ██╔══██║   ██║   ██║██║╚██╗██║██║   ██║    ██╔══██║██╔══██╗██╔══██╝██║   ██║██╔══╝  ██║╚██╗██║   ██║   
+███████║███████╗██║  ██║   ██║   ██║██║ ╚████║╚██████╔╝    ██║  ██║██║  ██║██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   
+╚══════╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝ ╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   
+"""
+        self.seating_title_label = tk.Label(self.seating_chart_frame, text=seating_art, font=self.mono_font, justify=tk.LEFT, bg=self.widget_bg, fg=self.accent_color2)
+        self.seating_title_label.grid(row=0, column=0, columnspan=self.cols, pady=(0, 20))
+
+        # --- Front of Classroom Label ---
+        front_label = tk.Label(self.seating_chart_frame, text="--- FRONT OF CLASSROOM ---", bg=self.widget_bg, fg=self.fg_color, font=font.Font(family="Segoe UI", size=10, slant="italic"))
+        front_label.grid(row=1, column=0, columnspan=self.cols, pady=(0, 10))
+
+        self.seat_labels = []
+        for r in range(self.rows):
+            row_labels = []
+            for c in range(self.cols):
+                seat_frame = tk.Frame(self.seating_chart_frame, width=120, height=60, bg=self.bg_color)
+                seat_frame.grid(row=r + 2, column=c, padx=5, pady=5)
+                seat_frame.pack_propagate(False)
+
+                label = tk.Label(seat_frame, text="", bg=self.bg_color, fg=self.fg_color, font=self.default_font)
+                label.pack(expand=True, fill='both')
+
+                if (r, c) in self.vacant_seats:
+                    label.config(text="VACANT", bg='#45475a', font=font.Font(family="Segoe UI Semibold", size=10))
+
+                row_labels.append(label)
+            self.seat_labels.append(row_labels)
+        
+        # --- Footer Section ---
+        footer_frame = tk.Frame(right_frame, bg=self.widget_bg)
+        footer_frame.pack(pady=10, padx=20, fill=tk.X, side=tk.BOTTOM)
+
+        mit_license_text = "Released under the MIT License"
+        license_label = tk.Label(footer_frame, text=mit_license_text, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
+        license_label.pack()
+
+        contact_text1 = "Contact: luruna_anachira.88works@outlook.com"
+        contact_label1 = tk.Label(footer_frame, text=contact_text1, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
+        contact_label1.pack()
+        
+        contact_text2 = "Contact: root_overclocker@outlook.com"
+        contact_label2 = tk.Label(footer_frame, text=contact_text2, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
+        contact_label2.pack()
+        
+        github_text = "GitHub: Anachira"
+        github_label = tk.Label(footer_frame, text=github_text, font=self.default_font, bg=self.widget_bg, fg=self.fg_color)
+        github_label.pack()
+
+    def start_shuffle(self):
+        self.names = [entry.get() for entry in self.name_entries]
+        # Clear previous seating arrangement before shuffle
+        for r in range(self.rows):
+            for c in range(self.cols):
+                 if (r, c) not in self.vacant_seats:
+                    self.seat_labels[r][c].config(text="", bg=self.bg_color)
+        self.root.update()
+        random.shuffle(self.names)
+        self.create_amidakuji_animation()
+
+    def create_amidakuji_animation(self):
+        self.animation_window = tk.Toplevel(self.root)
+        self.animation_window.title("Amidakuji Shuffle!")
+        self.animation_window.configure(bg=self.bg_color)
+
+        screen_width = self.animation_window.winfo_screenwidth()
+        screen_height = self.animation_window.winfo_screenheight()
+        win_width = int(screen_width * 0.9)
+        win_height = int(screen_height * 0.9)
+        x_pos = (screen_width - win_width) // 2
+        y_pos = (screen_height - win_height) // 2
+        self.animation_window.geometry(f"{win_width}x{win_height}+{x_pos}+{y_pos}")
+
+        h_scrollbar = tk.Scrollbar(self.animation_window, orient=tk.HORIZONTAL, bg=self.widget_bg, troughcolor=self.bg_color)
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        canvas = tk.Canvas(self.animation_window, bg=self.bg_color, xscrollcommand=h_scrollbar.set, highlightthickness=0)
+        canvas.pack(side=tk.LEFT, fill="both", expand=True)
+        h_scrollbar.config(command=canvas.xview)
+
+        num_verticals = self.num_students
+        path_width = int(win_width * 1.5)
+        path_height = win_height - 120
+        x_start = 50
+        y_start = 50
+        x_spacing = (path_width - 100) / (num_verticals -1) if num_verticals > 1 else 0
+
+        vertical_lines = []
+        for i in range(num_verticals):
+            x = x_start + i * x_spacing
+            canvas.create_line(x, y_start, x, y_start + path_height, width=2, fill=self.fg_color)
+            canvas.create_text(x, y_start - 20, text=self.names[i], font=self.default_font, fill=self.fg_color)
+            vertical_lines.append(x)
+
+        ladders = []
+        for _ in range(num_verticals * 4): 
+            v_index = random.randint(0, num_verticals - 2)
+            y_pos = random.randint(y_start + 40, y_start + path_height - 40)
+            
+            is_overlapping = False
+            for ladder_v, ladder_y in ladders:
+                if abs(ladder_y - y_pos) < 20: 
+                    if ladder_v == v_index or ladder_v == v_index - 1 or ladder_v == v_index + 1:
+                        is_overlapping = True
+                        break
+            if not is_overlapping:
+                ladders.append((v_index, y_pos))
+
+        for v_index, y_pos in ladders:
+            x1 = vertical_lines[v_index]
+            x2 = vertical_lines[v_index + 1]
+            canvas.create_line(x1, y_pos, x2, y_pos, width=2, fill=self.accent_color1)
+
+        canvas.config(scrollregion=canvas.bbox("all"))
+        self.root.update()
+        
+        end_positions = list(range(num_verticals))
+        sorted_ladders_calc = sorted(ladders, key=lambda item: item[1])
+        for v_idx, _ in sorted_ladders_calc:
+            end_positions[v_idx], end_positions[v_idx+1] = end_positions[v_idx+1], end_positions[v_idx]
+        
+        shuffled_names = [''] * num_verticals
+        for start_pos, end_pos in enumerate(end_positions):
+            shuffled_names[end_pos] = self.names[start_pos]
+
+        colors = ["#f9e2af", "#f38ba8", "#a6e3a1", "#89b4fa", "#b48ead", "#f5c2e7", "#94e2d5", "#fab387"]
+        base_animation_speed = 0.0025
+        animation_speed = base_animation_speed / self.speed_multiplier.get()
+
+        for i in range(num_verticals):
+            color = colors[i % len(colors)]
+            current_x = vertical_lines[i]
+            current_y = y_start
+            path_tracer = canvas.create_oval(current_x - 5, current_y - 5, current_x + 5, current_y + 5, fill=color, outline=color)
+            current_vertical_index = i
+            
+            for ladder_v_index, ladder_y in sorted_ladders_calc:
+                if ladder_v_index == current_vertical_index and ladder_y > current_y:
+                    self.animate_move(canvas, path_tracer, current_x, ladder_y, animation_speed, color)
+                    current_y = ladder_y
+                    next_x = vertical_lines[current_vertical_index + 1]
+                    self.animate_move(canvas, path_tracer, next_x, current_y, animation_speed, color)
+                    current_x = next_x
+                    current_vertical_index += 1
+                elif ladder_v_index == current_vertical_index - 1 and ladder_y > current_y:
+                    self.animate_move(canvas, path_tracer, current_x, ladder_y, animation_speed, color)
+                    current_y = ladder_y
+                    next_x = vertical_lines[current_vertical_index - 1]
+                    self.animate_move(canvas, path_tracer, next_x, current_y, animation_speed, color)
+                    current_x = next_x
+                    current_vertical_index -= 1
+
+            self.animate_move(canvas, path_tracer, current_x, y_start + path_height, animation_speed, color)
+            canvas.create_text(current_x, y_start + path_height + 25, text=self.names[i], font=self.default_font, fill=color)
+        
+        self.animation_window.after(1000, lambda: self.update_seating_chart(shuffled_names))
+        self.animation_window.after(3000, self.animation_window.destroy)
+
+    def animate_move(self, canvas, item, target_x, target_y, speed, trail_color):
+        coords = canvas.coords(item)
+        if not coords: return
+        current_x = (coords[0] + coords[2]) / 2
+        current_y = (coords[1] + coords[3]) / 2
+        dx = target_x - current_x
+        dy = target_y - current_y
+        distance = (dx**2 + dy**2)**0.5
+        if distance < 1: return
+        steps = int(distance / 2)
+        if steps == 0: steps = 1
+        vx = dx / steps
+        vy = dy / steps
+
+        for _ in range(steps):
+            if not canvas.winfo_exists(): return
+            start_coords = canvas.coords(item)
+            start_x, start_y = (start_coords[0] + start_coords[2]) / 2, (start_coords[1] + start_coords[3]) / 2
+            canvas.move(item, vx, vy)
+            end_coords = canvas.coords(item)
+            end_x, end_y = (end_coords[0] + end_coords[2]) / 2, (end_coords[1] + end_coords[3]) / 2
+            canvas.create_line(start_x, start_y, end_x, end_y, fill=trail_color, width=4, capstyle=tk.ROUND)
+            self.root.update()
+            time.sleep(speed)
+
+    def update_seating_chart(self, shuffled_names):
+        name_index = 0
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if (r, c) not in self.vacant_seats:
+                    if name_index < len(shuffled_names):
+                        self.seat_labels[r][c].config(text=shuffled_names[name_index], bg=self.accent_color2, fg=self.bg_color, font=font.Font(family="Segoe UI Semibold", size=10))
+                        name_index += 1
+                    else:
+                        self.seat_labels[r][c].config(text="EMPTY", bg=self.bg_color)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AmidakujiApp(root)
+    root.mainloop()
