@@ -19,11 +19,12 @@ class AmidakujiApp:
         self.root.configure(bg=self.bg_color)
         self.root.geometry("1400x900")
 
-        # --- Fonts (with Japanese support) ---
-        self.default_font = font.Font(family="Yu Gothic UI", size=10)
-        self.title_font = font.Font(family="Yu Gothic UI Semibold", size=14)
-        self.mono_font = font.Font(family="Consolas", size=9)
-        self.license_font = font.Font(family="Segoe UI", size=8)
+        # --- Fonts (with cross-platform Japanese support) ---
+        # Provide a tuple of fonts. Tkinter will use the first one it finds.
+        self.default_font = font.Font(family=("Noto Sans CJK JP", "Yu Gothic UI", "MS Gothic", "sans-serif"), size=10)
+        self.title_font = font.Font(family=("Noto Sans CJK JP", "Yu Gothic UI", "MS Gothic", "sans-serif"), size=14, weight="bold")
+        self.mono_font = font.Font(family=("Noto Mono", "Consolas", "monospace"), size=9)
+        self.license_font = font.Font(family=("Noto Sans CJK JP", "Segoe UI", "sans-serif"), size=8)
 
         # Student data
         self.num_students = 34
